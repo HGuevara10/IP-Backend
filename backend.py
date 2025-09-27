@@ -1,51 +1,69 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import mysql.connector
+import queries
 
 app = Flask(__name__)
 CORS(app) 
 
 def get_db_connection():
-    conn = mysql.connector.connect(
+    return mysql.connector.connect(
         host="localhost",
         user="root",          
         password="Imapilot10$#", 
         database="sakila"  
     )
-    return conn
 
-@app.route("/data", methods=["GET"])
-def get_data():
+@app.route("/top5_movies")
+def top5_movies():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-
-    query = """
-        select 
-        f.film_id,
-        f.title,
-        c.name AS category_name
-        from film f
-        join film_category fc ON f.film_id = fc.film_id
-        join category c ON fc.category_id = c.category_id;
-
-    """
+    query = queries.top5movies_query
     cursor.execute(query)
     rows = cursor.fetchall()
     conn.close()
     return jsonify(rows)
 
-@app.route("/add", methods=["POST"])
-def add_item():
-    data = request.json
-    value = data.get("value")
+@app.route("/top5_actors")
+def top5_actors():
 
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO yourtable (column_name) VALUES (%s)", (value,))
-    conn.commit()
+    cursor = conn.cursor(dictionary=True)
+    query = queries.top5actors_query
+    cursor.execute(query)
+    rows = cursor.fetchall()
     conn.close()
+    return jsonify(rows)
 
-    return jsonify({"status": "success", "value": value})
+@app.route("/movies_by_genre/<genre>")
+def movies_by_genre(genre):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = queries.moviesbygenre_query
+    cursor.execute(query, (genre,))
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify(rows)
+
+@app.route("/actors")
+def actors():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = queries.actors_query
+    cursor.execute(query) 
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify(rows)
+
+@app.route("/users")
+def users():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = queries.users_query
+    cursor.execute(query) 
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify(rows)
 
 if __name__ == "__main__":
     app.run(debug=True)
