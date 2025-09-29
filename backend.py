@@ -68,5 +68,30 @@ def users():
     conn.close()
     return jsonify(rows)
 
+@app.route("/all_films")
+def all_films():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    limit = int(request.args.get("limit", 20))
+    page = int(request.args.get("page", 1))
+    offset = (page - 1) * limit
+
+    cursor.execute(queries.all_films_count_query)
+    total = cursor.fetchone()["total"]
+
+    cursor.execute(queries.all_films_query, (limit, offset))
+    films = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return jsonify({
+        "total": total,
+        "films": films,
+        "page": page,
+        "limit": limit
+    })
+
 if __name__ == "__main__":
     app.run(debug=True)
