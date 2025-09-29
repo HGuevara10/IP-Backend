@@ -63,37 +63,13 @@ actors_query = '''
 '''
 
 users_query = '''
-    SELECT 
-        c.customer_id,
-        c.first_name,
-        c.last_name,
-        COUNT(r.rental_id) AS count
-    FROM rental r
-    JOIN customer c ON r.customer_id = c.customer_id
-    GROUP BY c.customer_id, c.first_name, c.last_name
-    ORDER BY count DESC;
-'''
-
-all_films_query = '''
-    SELECT
-        f.film_id,
-        f.title,
-        f.release_year,
-        f.rating,
-        f.description,
-        c.name AS category,
-        COUNT(DISTINCT r.rental_id) AS rented,
-        COUNT(DISTINCT i.inventory_id) AS inventory_count
-    FROM film f
-    JOIN film_category fc ON f.film_id = fc.film_id
-    JOIN category c ON fc.category_id = c.category_id
-    LEFT JOIN inventory i ON f.film_id = i.film_id
-    LEFT JOIN rental r ON i.inventory_id = r.inventory_id
-    GROUP BY f.film_id, f.title, f.release_year, f.rating, f.description, c.name
-    ORDER BY f.film_id
-    LIMIT %s OFFSET %s;
-'''
-
-all_films_count_query = '''
-    SELECT COUNT(*) AS total FROM film;
+    select 
+	c.customer_id,
+	c.first_name,
+	c.last_name,
+	COUNT(r.rental_id) as count
+    from rental r
+    join customer c on r.customer_id = c.customer_id 
+    group by c.customer_id, c.first_name, c.last_name
+    order by count desc
 '''
