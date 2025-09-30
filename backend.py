@@ -70,27 +70,71 @@ def users():
 
 @app.route("/all_films")
 def all_films():
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 20))
+    offset = (page - 1) * limit
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    limit = int(request.args.get("limit", 20))
-    page = int(request.args.get("page", 1))
-    offset = (page - 1) * limit
+    cursor.execute(queries.all_films_query, (limit, offset))
+    rows = cursor.fetchall()
 
     cursor.execute(queries.all_films_count_query)
     total = cursor.fetchone()["total"]
 
-    cursor.execute(queries.all_films_query, (limit, offset))
-    films = cursor.fetchall()
+    conn.close()
+
+    return jsonify({
+        "data": rows,
+        "page": page,
+        "limit": limit,
+        "total": total
+    })
+
+@app.route("/rent_film", methods=["POST"])
+def rent_film():
+    data = request.get_json()
+    customer_id = data.get("customer_id")
+    film_id = data.get("film_id")
+
+    if not customer_id or not film_id:
+        return jsonify({"error": "customer_id and film_id are required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT * FROM customer WHERE customer_id = %s", (customer_id,))
+    customer = cursor.fetchone()
+    if not customer:
+        conn.close()
+        return jsonify({"error": "Invalid Customer ID"}), 400
+
+    cursor.execute(queries.fetch_inventory_copy, (film_id,))
+    inventory = cursor.fetchone()
+
+    if not inventory:
+        conn.close()
+        return jsonify({"error": "No available copies for this film"}), 400
+
+    inventory_id = inventory["inventory_id"]
+
+    cursor.execute(queries.insert_new_rental, (inventory_id, customer_id))
+    conn.commit()
+
+    # Fetch updated inventory info
+    cursor.execute(queries.fetch_inventory_count, (film_id,))
+    updated = cursor.fetchone()
 
     cursor.close()
     conn.close()
 
     return jsonify({
-        "total": total,
-        "films": films,
-        "page": page,
-        "limit": limit
+        "success": True,
+        "film_id": film_id,
+        "available": updated["available"],
+        "rented": updated["rented"],
+        "inventory_count": updated["inventory_count"]
     })
 
 if __name__ == "__main__":
