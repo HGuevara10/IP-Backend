@@ -61,12 +61,28 @@ def actors():
 
 @app.route("/users")
 def users():
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 20))
+    offset = (page - 1) * limit
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(queries.users_query)
+
+    cursor.execute(queries.users_query, (limit, offset))
     rows = cursor.fetchall()
+
+    cursor.execute(queries.users_count_query)
+    total = cursor.fetchone()["total"]
+
     conn.close()
-    return jsonify(rows)
+
+    return jsonify({
+        "data": rows,
+        "page": page,
+        "limit": limit,
+        "total": total
+    })
+
 
 @app.route("/all_films")
 def all_films():
@@ -122,7 +138,6 @@ def rent_film():
     cursor.execute(queries.insert_new_rental, (inventory_id, customer_id))
     conn.commit()
 
-    # Fetch updated inventory info
     cursor.execute(queries.fetch_inventory_count, (film_id,))
     updated = cursor.fetchone()
 
