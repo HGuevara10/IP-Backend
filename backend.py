@@ -122,7 +122,6 @@ def rent_film():
     cursor.execute(queries.insert_new_rental, (inventory_id, customer_id))
     conn.commit()
 
-    # Fetch updated inventory info
     cursor.execute(queries.fetch_inventory_count, (film_id,))
     updated = cursor.fetchone()
 
