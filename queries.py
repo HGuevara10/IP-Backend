@@ -138,3 +138,38 @@ fetch_inventory_copy = """
     )
     LIMIT 1;
 """
+
+search_film_actor_or_genre = """
+    SELECT DISTINCT 
+        f.film_id, 
+        f.title, 
+        f.release_year, 
+        c.name AS category
+    FROM film f
+    LEFT JOIN film_actor fa ON f.film_id = fa.film_id
+    LEFT JOIN actor a ON fa.actor_id = a.actor_id
+    LEFT JOIN film_category fc ON f.film_id = fc.film_id
+    LEFT JOIN category c ON fc.category_id = c.category_id
+    WHERE LOWER(f.title) LIKE %s
+       OR LOWER(a.first_name) LIKE %s
+       OR LOWER(a.last_name) LIKE %s
+       OR LOWER(CONCAT(a.first_name, ' ', a.last_name)) LIKE %s
+       OR LOWER(c.name) LIKE %s
+"""
+
+search_users_query = """
+    SELECT 
+        c.customer_id,
+        c.first_name,
+        c.last_name,
+        COUNT(r.rental_id) AS count
+    FROM customer c
+    LEFT JOIN rental r ON r.customer_id = c.customer_id
+    WHERE CAST(c.customer_id AS CHAR) LIKE %s
+        OR LOWER(c.first_name) LIKE %s
+        OR LOWER(c.last_name) LIKE %s
+        OR LOWER(CONCAT(c.first_name, ' ', c.last_name)) LIKE %s
+    GROUP BY c.customer_id, c.first_name, c.last_name
+    ORDER BY c.customer_id ASC
+    LIMIT %s OFFSET %s;
+"""
