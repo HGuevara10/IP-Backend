@@ -9,11 +9,14 @@ CORS(app)
 def get_db_connection():
     return mysql.connector.connect(
         host="localhost",
-        user="root",          
-        password="Imapilot10$#", 
+        user="root",
+        password="Imapilot10$#",
         database="sakila"
     )
 
+# ------------------------------
+# 🔹 MOVIES & ACTORS ENDPOINTS
+# ------------------------------
 @app.route("/top5_movies")
 def top5_movies():
     conn = get_db_connection()
@@ -59,48 +62,9 @@ def actors():
     conn.close()
     return jsonify(rows)
 
-@app.route("/users")
-def users():
-    search = request.args.get("search", "").strip().lower()
-    page = int(request.args.get("page", 1))
-    limit = int(request.args.get("limit", 20))
-    offset = (page - 1) * limit
-
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    if search:
-        cursor.execute(
-            queries.search_users_query,
-            (
-                f"%{search}%",
-                f"%{search}%",
-                f"%{search}%",
-                f"%{search}%",
-                limit,
-                offset,
-            ),
-        )
-        rows = cursor.fetchall()
-
-        cursor.execute("SELECT COUNT(*) AS total FROM customer;")
-        total = cursor.fetchone()["total"]
-    else:
-        cursor.execute(queries.users_query, (limit, offset))
-        rows = cursor.fetchall()
-
-        cursor.execute(queries.users_count_query)
-        total = cursor.fetchone()["total"]
-
-    conn.close()
-
-    return jsonify({
-        "data": rows,
-        "page": page,
-        "limit": limit,
-        "total": total
-    })  
-
+# ------------------------------
+# 🔹 FILMS PAGE
+# ------------------------------
 
 @app.route("/all_films")
 def all_films():
@@ -126,6 +90,42 @@ def all_films():
         "total": total
     })
 
+@app.route('/films', methods=['GET']) 
+def get_films(): 
+    search = request.args.get('search', '').strip().lower() 
+    page = int(request.args.get('page', 1)) 
+    limit = int(request.args.get('limit', 20)) 
+    offset = (page - 1) * limit 
+
+    conn = get_db_connection() 
+    cursor = conn.cursor(dictionary=True) 
+
+    if search: 
+        cursor.execute(queries.search_film_actor_or_genre, ( 
+            f"%{search}%", 
+            f"%{search}%", 
+            f"%{search}%", 
+            f"%{search}%", 
+            f"%{search}%" 
+        )) 
+        films = cursor.fetchall() 
+        total = len(films) 
+    else: 
+        cursor.execute(queries.all_films_query, (limit, offset)) 
+        films = cursor.fetchall() 
+        cursor.execute(queries.all_films_count_query) 
+        total = cursor.fetchone()["total"] 
+
+    conn.close() 
+    return jsonify({ 
+        "data": films, 
+        "page": page, 
+        "total": total 
+    })
+
+# ------------------------------
+# 🔹 RENT FILM
+# ------------------------------
 @app.route("/rent_film", methods=["POST"])
 def rent_film():
     data = request.get_json()
@@ -152,7 +152,6 @@ def rent_film():
         return jsonify({"error": "No available copies for this film"}), 400
 
     inventory_id = inventory["inventory_id"]
-
     cursor.execute(queries.insert_new_rental, (inventory_id, customer_id))
     conn.commit()
 
@@ -170,39 +169,74 @@ def rent_film():
         "inventory_count": updated["inventory_count"]
     })
 
-@app.route('/films', methods=['GET'])
-def get_films():
-    search = request.args.get('search', '').strip().lower()
-    page = int(request.args.get('page', 1))
-    limit = int(request.args.get('limit', 20))
+# ------------------------------
+# 🔹 USERS / CUSTOMERS MANAGEMENT
+# ------------------------------
+@app.route("/users", methods=["GET"])
+def get_users():
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 20))
+    search = request.args.get("search", "")
     offset = (page - 1) * limit
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cur = conn.cursor(dictionary=True)
 
     if search:
-        cursor.execute(queries.search_film_actor_or_genre, (
-            f"%{search}%", 
-            f"%{search}%", 
-            f"%{search}%", 
-            f"%{search}%",
-            f"%{search}%"
+        cur.execute("""
+            SELECT c.customer_id, c.first_name, c.last_name, c.email,
+                   COUNT(r.rental_id) AS count
+            FROM customer c
+            LEFT JOIN rental r ON c.customer_id = r.customer_id
+            WHERE CONCAT(c.first_name, ' ', c.last_name) LIKE %s
+               OR c.first_name LIKE %s OR c.last_name LIKE %s OR c.customer_id LIKE %s
+            GROUP BY c.customer_id
+            ORDER BY c.customer_id
+            LIMIT %s OFFSET %s
+        """, (
+            f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", limit, offset
         ))
-        films = cursor.fetchall()
-        total = len(films)
     else:
-        cursor.execute(queries.all_films_query, (limit, offset))
-        films = cursor.fetchall()
-        cursor.execute(queries.all_films_count_query)
-        total = cursor.fetchone()["total"]
+        cur.execute("""
+            SELECT c.customer_id, c.first_name, c.last_name, c.email,
+                   COUNT(r.rental_id) AS count
+            FROM customer c
+            LEFT JOIN rental r ON c.customer_id = r.customer_id
+            GROUP BY c.customer_id
+            ORDER BY c.customer_id
+            LIMIT %s OFFSET %s
+        """, (limit, offset))
 
+    users = cur.fetchall()
+    cur.execute("SELECT COUNT(*) AS total FROM customer")
+    total = cur.fetchone()["total"]
+
+    cur.close()
+    conn.close()
+    return jsonify({"data": users, "total": total, "page": page})
+
+@app.route("/users/<int:customer_id>", methods=["PUT"])
+def update_user(customer_id):
+    data = request.get_json()
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    email = data.get("email")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE customer
+        SET first_name = %s, last_name = %s, email = %s
+        WHERE customer_id = %s
+    """, (first_name, last_name, email, customer_id))
+
+    conn.commit()
+    cur.close()
     conn.close()
 
-    return jsonify({
-        "data": films,
-        "page": page,
-        "total": total
-    })
+    return jsonify({"message": "Customer updated successfully"}), 200
+
 
 @app.route("/add_customer", methods=["POST"])
 def add_customer():
@@ -244,15 +278,26 @@ def add_customer():
         conn.close()
 
 
-@app.route("/customers", methods=["GET"])
-def get_customers():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM customer")
-    customers = cursor.fetchall()
-    conn.close()
-    return jsonify(customers)
 
+@app.route("/edit-customer/<int:customer_id>", methods=["PUT"])
+def edit_customer(customer_id):
+    data = request.get_json()
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    email = data.get("email")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE customer
+        SET first_name = %s, last_name = %s, email = %s, last_update = NOW()
+        WHERE customer_id = %s
+    """, (first_name, last_name, email, customer_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"message": "Customer updated successfully"})
 
 @app.route("/delete_customer", methods=["POST"])
 def delete_customer():
@@ -285,6 +330,70 @@ def delete_customer():
     cursor.close()
     conn.close()
     return jsonify({"success": True, "customer_id": customer_id})
+
+@app.route("/users/<int:customer_id>/details", methods=["GET"])
+def get_customer_details(customer_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT customer_id, first_name, last_name, email, active, create_date, last_update
+        FROM customer
+        WHERE customer_id = %s
+    """, (customer_id,))
+    customer = cursor.fetchone()
+
+    if not customer:
+        conn.close()
+        return jsonify({"error": "Customer not found"}), 404
+
+    cursor.execute("""
+        SELECT 
+            r.rental_id,
+            f.title AS film_title,
+            r.rental_date,
+            r.return_date,
+            s.store_id
+        FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        JOIN store s ON i.store_id = s.store_id
+        WHERE r.customer_id = %s
+        ORDER BY r.rental_date DESC
+    """, (customer_id,))
+
+    rentals = cursor.fetchall()
+
+    conn.close()
+
+    return jsonify({
+        "customer": customer,
+        "rental_history": rentals
+    })
+
+@app.route("/return_rental/<int:rental_id>", methods=["POST"])
+def return_rental(rental_id):
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("SELECT return_date FROM rental WHERE rental_id = %s", (rental_id,))
+    rental = cur.fetchone()
+    if not rental:
+        conn.close()
+        return jsonify({"error": "Rental not found"}), 404
+    if rental["return_date"] is not None:
+        conn.close()
+        return jsonify({"error": "Rental already returned"}), 400
+
+    cur.execute(
+        "UPDATE rental SET return_date = NOW() WHERE rental_id = %s",
+        (rental_id,)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"success": True, "rental_id": rental_id})
 
 
 if __name__ == "__main__":
